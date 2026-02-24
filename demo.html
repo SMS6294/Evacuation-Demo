@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lulu Mall - Zoned Evacuation System</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; color: #333; display: flex; flex-direction: column; align-items: center; padding: 20px; margin: 0; }
+        h1 { margin-bottom: 5px; color: #2c3e50; }
+        p { color: #555; margin-top: 0; margin-bottom: 20px; }
+        .dashboard { display: flex; gap: 25px; background: #fff; padding: 25px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
+        .canvas-container { box-shadow: 0 4px 15px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; position: relative; }
+        canvas { display: block; cursor: crosshair; background: white; }
+        .controls { width: 320px; display: flex; flex-direction: column; gap: 20px; }
+        .control-group { background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #e9ecef; }
+        .control-group.hazard-zone { background: #fff5f5; border-color: #ffcccc; }
+        label { display: block; margin-bottom: 8px; font-weight: 600; color: #555; }
+        select, button { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ced4da; font-size: 14px; background: #fff; }
+        button { background-color: #3498db; color: white; border: none; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+        button:hover { background-color: #2980b9; }
+        button.apply-btn { background-color: #e74c3c; margin-top: 10px; }
+        button.apply-btn:hover { background-color: #c0392b; }
+        .status-box { background: #1e272e; color: #00d8d6; padding: 15px; border-radius: 6px; font-family: 'Courier New', Courier, monospace; font-size: 13px; min-height: 120px; border-left: 4px solid #0fb9b1; }
+        
+        .checkbox-group div { margin-bottom: 8px; display: flex; align-items: center; }
+        input[type="checkbox"] { margin-right: 10px; transform: scale(1.2); }
+        kbd { background: #eee; border: 1px solid #ccc; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h1>Evacuation & Surveillance System</h1>
+    <p>Use <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> or <kbd>Arrows</kbd> to move your blue dot.</p>
+
+    <div class="dashboard">
+        <div class="canvas-container">
+            <canvas id="mallMap" width="750" height="500"></canvas>
+        </div>
+
+        <div class="controls">
+            <div class="control-group hazard-zone">
+                <label>🛡️ Incident Command (Block Zones):</label>
+                <div class="checkbox-group">
+                    <div><input type="checkbox" id="blockA"> <label for="blockA" style="color: #d4ac0d; margin:0; font-weight:bold;">Zone A (Westside)</label></div>
+                    <div><input type="checkbox" id="blockB"> <label for="blockB" style="color: #28a745; margin:0; font-weight:bold;">Zone B (M&S)</label></div>
+                    <div><input type="checkbox" id="blockC"> <label for="blockC" style="color: #007bff; margin:0; font-weight:bold;">Zone C (Center)</label></div>
+                    <div><input type="checkbox" id="blockD"> <label for="blockD" style="color: #6f42c1; margin:0; font-weight:bold;">Zone D (Hypermarket)</label></div>
+                </div>
+                <button class="apply-btn" onclick="applyZoneChanges()">Trigger Zone Lockdown</button>
+            </div>
+
+            <div class="control-group">
+                <label for="clickMode">👆 Mouse Click Action:</label>
+                <select id="clickMode">
+                    <option value="hazard">Place Manual Blockage</option>
+                    <option value="user">Teleport User</option>
+                </select>
+                <button onclick="clearManualHazards()" style="margin-top:10px; background:#7f8c8d;">Clear Manual Blocks</button>
+            </div>
+
+            <div class="control-group">
+                <label>📡 Live Camera & Routing Feed:</label>
+                <div class="status-box" id="statusDisplay">
+                    System Normal.<br>All cameras in standby mode.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('mallMap');
+        const ctx = canvas.getContext('2d');
+        const statusDisplay = document.getElementById('statusDisplay');
+        const clickMode = document.getElementById('clickMode');
+
+        const cols = 45;
+        const rows = 30;
+        const cellSize = canvas.width / cols;
+
+        const EMPTY = 0, WALL = 1, EXIT = 2, HAZARD = 3;
+        let baseGrid = []; 
+        let grid = [];     
+        
+        // PLACED USER EXACTLY IN THE CENTER OF THE MAP
+        let userPos = { x: 22, y: 15 }; 
+        
+        let path = [];
+        let pathIsHazard = false; 
+        let manualHazards = [];
+        let activeZones = [];
+
+        const cameras = [
+            { id: "CAM-A1", x: 4, y: 2, zone: 'A' },
+            { id: "CAM-A2", x: 16, y: 2, zone: 'A' },
+            { id: "CAM-B1", x: 14, y: 16, zone: 'B' },
+            { id: "CAM-B2", x: 4, y: 28, zone: 'B' },
+            { id: "CAM-C1", x: 24, y: 4, zone: 'C' },
+            { id: "CAM-C2", x: 24, y: 15, zone: 'C' },
+            { id: "CAM-D1", x: 35, y: 2, zone: 'D' },
+            { id: "CAM-D2", x: 40, y: 28, zone: 'D' }
+        ];
+
+        function getZone(x, y) {
+            if (x >= 30) return 'D';
+            if (x < 18 && y < 14) {
+                if (x > 12 && y > 8) return 'C'; 
+                return 'A';
+            }
+            if (x < 18 && y >= 14) return 'B';
+            return 'C';
+        }
+
+        function initBaseGrid() {
+            baseGrid = Array.from({ length: rows }, () => Array(cols).fill(EMPTY));
+            for(let y=2; y<rows; y++) for(let x=30; x<cols; x++) baseGrid[y][x] = WALL; 
+            for(let y=4; y<12; y++) for(let x=2; x<10; x++) baseGrid[y][x] = WALL;  
+            for(let y=16; y<28; y++) for(let x=2; x<12; x++) baseGrid[y][x] = WALL; 
+            for(let y=8; y<14; y++) for(let x=20; x<28; x++) baseGrid[y][x] = WALL; 
+            for(let y=18; y<24; y++) for(let x=20; x<26; x++) baseGrid[y][x] = WALL; 
+
+            baseGrid[rows-1][14] = EXIT; 
+            baseGrid[15][cols-1] = EXIT; 
+            baseGrid[0][22] = EXIT;      
+            baseGrid[12][0] = EXIT;      
+            baseGrid[rows-1][38] = EXIT; 
+            baseGrid[0][8] = EXIT;       
+        }
+
+        function updateActiveGrid() {
+            grid = baseGrid.map(row => [...row]);
+            const blocked = {
+                A: document.getElementById('blockA').checked,
+                B: document.getElementById('blockB').checked,
+                C: document.getElementById('blockC').checked,
+                D: document.getElementById('blockD').checked
+            };
+            activeZones = Object.keys(blocked).filter(z => blocked[z]);
+
+            for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                    if (grid[y][x] !== WALL && grid[y][x] !== EXIT) {
+                        if (blocked[getZone(x, y)]) grid[y][x] = HAZARD;
+                    }
+                }
+            }
+            manualHazards.forEach(h => {
+                if (grid[h.y][h.x] !== WALL && grid[h.y][h.x] !== EXIT) grid[h.y][h.x] = HAZARD;
+            });
+        }
+
+        function findPath() {
+            pathIsHazard = false;
+            if (grid[userPos.y][userPos.x] === WALL) { path = []; return; }
+
+            // Pass 1: Try to find a completely safe route
+            path = bfs(false);
+            
+            // Pass 2: If no safe route exists, find the shortest route ignoring hazards
+            if (path.length === 0) {
+                path = bfs(true);
+                if (path.length > 0) {
+                    pathIsHazard = true;
+                }
+            }
+        }
+
+        function bfs(allowHazards) {
+            if (!allowHazards && grid[userPos.y][userPos.x] === HAZARD) return [];
+
+            let queue = [{ x: userPos.x, y: userPos.y, history: [] }];
+            let visited = new Set([`${userPos.x},${userPos.y}`]);
+            const dirs = [{x:0,y:-1},{x:0,y:1},{x:-1,y:0},{x:1,y:0}];
+
+            while (queue.length > 0) {
+                let current = queue.shift();
+                if (grid[current.y][current.x] === EXIT) {
+                    return [...current.history, {x: current.x, y: current.y}];
+                }
+                for (let dir of dirs) {
+                    let nx = current.x + dir.x, ny = current.y + dir.y;
+                    if (nx>=0 && nx<cols && ny>=0 && ny<rows) {
+                        let isWall = grid[ny][nx] === WALL;
+                        let isHazard = grid[ny][nx] === HAZARD;
+                        
+                        if (!visited.has(`${nx},${ny}`) && !isWall) {
+                            if (allowHazards || !isHazard) {
+                                visited.add(`${nx},${ny}`);
+                                queue.push({ x:nx, y:ny, history: [...current.history, {x:current.x, y:current.y}] });
+                            }
+                        }
+                    }
+                }
+            }
+            return []; 
+        }
+
+        function drawArrowHead(ctx, x, y, angle) {
+            const headlen = 6; 
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x - headlen * Math.cos(angle - Math.PI / 6), y - headlen * Math.sin(angle - Math.PI / 6));
+            ctx.moveTo(x, y);
+            ctx.lineTo(x - headlen * Math.cos(angle + Math.PI / 6), y - headlen * Math.sin(angle + Math.PI / 6));
+            ctx.stroke();
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. Draw Zones Background
+            for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                    const zone = getZone(x, y);
+                    if(zone === 'A') ctx.fillStyle = '#fffde7';
+                    if(zone === 'B') ctx.fillStyle = '#e8f5e9';
+                    if(zone === 'C') ctx.fillStyle = '#e3f2fd';
+                    if(zone === 'D') ctx.fillStyle = '#f3e5f5';
+                    ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+                }
+            }
+
+            // 2. Darker, More Visible Labels
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; 
+            ctx.font = 'bold 36px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText("ZONE A", 5 * cellSize, 8 * cellSize);
+            ctx.fillText("ZONE B", 6 * cellSize, 22 * cellSize);
+            ctx.fillText("ZONE C", 24 * cellSize, 16 * cellSize);
+            ctx.fillText("ZONE D", 37 * cellSize, 16 * cellSize);
+
+            // 3. Draw Objects
+            for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                    if (grid[y][x] === WALL) { ctx.fillStyle = '#404040'; ctx.fillRect(x*cellSize+1, y*cellSize+1, cellSize-2, cellSize-2); }
+                    if (grid[y][x] === EXIT) { ctx.fillStyle = '#28a745'; ctx.fillRect(x*cellSize+1, y*cellSize+1, cellSize-2, cellSize-2); }
+                    if (grid[y][x] === HAZARD) { ctx.fillStyle = 'rgba(231, 76, 60, 0.8)'; ctx.fillRect(x*cellSize, y*cellSize, cellSize, cellSize); }
+                }
+            }
+
+            // 4. Draw Path with Arrows
+            if (path.length > 0) {
+                ctx.beginPath(); 
+                ctx.strokeStyle = pathIsHazard ? '#f39c12' : '#3498db'; 
+                ctx.lineWidth = 4; 
+                ctx.lineJoin = 'round';
+                ctx.lineCap = 'round';
+                for (let i=0; i<path.length; i++) {
+                    let px = path[i].x*cellSize + cellSize/2, py = path[i].y*cellSize + cellSize/2;
+                    if(i===0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                }
+                ctx.stroke();
+
+                ctx.strokeStyle = '#ffffff'; 
+                ctx.lineWidth = 2;
+                for (let i = 0; i < path.length - 1; i += 2) { 
+                    let p1 = path[i];
+                    let p2 = path[i+1];
+                    let px2 = p2.x * cellSize + cellSize/2;
+                    let py2 = p2.y * cellSize + cellSize/2;
+                    let angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+                    drawArrowHead(ctx, px2, py2, angle);
+                }
+            }
+
+            // 5. Cameras
+            let activeCamsHTML = "";
+            cameras.forEach(cam => {
+                let px = cam.x * cellSize + cellSize/2;
+                let py = cam.y * cellSize + cellSize/2;
+                
+                if (activeZones.includes(cam.zone)) {
+                    let targetX = 0, targetY = 0;
+                    if(cam.zone === 'A') { targetX = 5; targetY = 8; }
+                    if(cam.zone === 'B') { targetX = 6; targetY = 22; }
+                    if(cam.zone === 'C') { targetX = 24; targetY = 16; }
+                    if(cam.zone === 'D') { targetX = 37; targetY = 16; }
+
+                    ctx.beginPath(); ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(231, 76, 60, 0.9)'; ctx.lineWidth = 2;
+                    ctx.moveTo(px, py);
+                    ctx.lineTo(targetX * cellSize, targetY * cellSize);
+                    ctx.stroke(); ctx.setLineDash([]);
+                    
+                    ctx.fillStyle = '#ff0000';
+                    activeCamsHTML += `> ${cam.id} [Z-${cam.zone}]: TRACKING HAZARD<br>`;
+                } else {
+                    ctx.fillStyle = '#333'; 
+                }
+                
+                ctx.fillRect(px - 6, py - 6, 12, 12);
+                ctx.fillStyle = 'white';
+                ctx.fillRect(px - 2, py - 2, 4, 4);
+            });
+
+            // 6. Draw User
+            let inHazard = grid[userPos.y][userPos.x] === HAZARD;
+            
+            ctx.fillStyle = inHazard ? '#e74c3c' : '#3498db'; 
+            ctx.beginPath();
+            ctx.arc(userPos.x*cellSize+cellSize/2, userPos.y*cellSize+cellSize/2, cellSize/2.2, 0, Math.PI*2);
+            ctx.fill(); 
+            ctx.strokeStyle = 'white'; 
+            ctx.lineWidth = 2; 
+            ctx.stroke();
+
+            updateStatusDisplay(activeCamsHTML, inHazard);
+        }
+
+        function updateStatusDisplay(cameraData, inHazard) {
+            let statusHtml = "";
+            if (activeZones.length > 0 || manualHazards.length > 0) {
+                statusHtml += "<span style='color:#ff4757; font-weight:bold;'>! INCIDENT DETECTED !</span><br><br>";
+                statusHtml += `Evac Route Active.<br><br>`;
+                if(cameraData) {
+                    statusHtml += `<span style='color:#ffa502'>-- LIVE CAMERA FEEDS --</span><br>${cameraData}`;
+                }
+            } else {
+                statusHtml = "✅ System Normal.<br>All cameras in standby mode.";
+            }
+
+            if (inHazard) {
+                statusHtml += "<br><br><span style='background:#e74c3c; color:white; padding:4px; font-weight:bold;'>USER IN DANGER ZONE</span>";
+            }
+            if (pathIsHazard && path.length > 0) {
+                statusHtml += "<br><br><span style='background:#f39c12; color:black; padding:4px; font-weight:bold;'>EMERGENCY EXTRACTION ROUTE</span>";
+            }
+
+            if (path.length === 0 && grid[userPos.y][userPos.x] !== EXIT) {
+                 statusHtml += "<br><br><span style='background:#ff4757; color:white; padding:4px;'>CRITICAL: COMPLETELY TRAPPED</span>";
+            }
+            if (grid[userPos.y][userPos.x] === EXIT) {
+                statusHtml = "<span style='color:#2ed573; font-weight:bold; font-size:16px;'>USER SECURE AT EXIT.</span>";
+            }
+            statusDisplay.innerHTML = statusHtml;
+        }
+
+        // EVENT LISTENERS (Reliable, no animation loop)
+        document.addEventListener('keydown', (e) => {
+            if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].indexOf(e.code) > -1) e.preventDefault();
+            let nx = userPos.x;
+            let ny = userPos.y;
+            if (e.key === 'ArrowUp' || e.key === 'w') ny--;
+            if (e.key === 'ArrowDown' || e.key === 's') ny++;
+            if (e.key === 'ArrowLeft' || e.key === 'a') nx--;
+            if (e.key === 'ArrowRight' || e.key === 'd') nx++;
+
+            if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+                if (grid[ny][nx] !== WALL) {
+                    userPos = { x: nx, y: ny };
+                    applyZoneChanges(); 
+                }
+            }
+        });
+
+        function applyZoneChanges() {
+            updateActiveGrid();
+            findPath();
+            draw();
+        }
+
+        function clearManualHazards() {
+            manualHazards = [];
+            applyZoneChanges();
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / cellSize);
+            const y = Math.floor((e.clientY - rect.top) / cellSize);
+
+            if (x>=0 && x<cols && y>=0 && y<rows) {
+                if (clickMode.value === 'user') {
+                    if (grid[y][x] !== WALL) userPos = { x, y };
+                } else {
+                    if (baseGrid[y][x] !== WALL && baseGrid[y][x] !== EXIT) {
+                        manualHazards.push({x, y});
+                    }
+                }
+                applyZoneChanges();
+            }
+        });
+
+        // Initialize and draw once
+        initBaseGrid();
+        applyZoneChanges(); 
+    </script>
+</body>
+</html>
