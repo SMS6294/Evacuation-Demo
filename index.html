@@ -50,19 +50,19 @@
             </div>
 
             <div class="control-group">
+                <label>📡 Live Camera & Routing Feed:</label>
+                <div class="status-box" id="statusDisplay">
+                    System Normal.<br>All cameras in standby mode.
+                </div>
+            </div>
+
+            <div class="control-group">
                 <label for="clickMode">👆 Mouse Click Action:</label>
                 <select id="clickMode">
                     <option value="hazard">Place Manual Blockage</option>
                     <option value="user">Teleport User</option>
                 </select>
                 <button onclick="clearManualHazards()" style="margin-top:10px; background:#7f8c8d;">Clear Manual Blocks</button>
-            </div>
-
-            <div class="control-group">
-                <label>📡 Live Camera & Routing Feed:</label>
-                <div class="status-box" id="statusDisplay">
-                    System Normal.<br>All cameras in standby mode.
-                </div>
             </div>
         </div>
     </div>
@@ -81,7 +81,6 @@
         let baseGrid = []; 
         let grid = [];     
         
-        // PLACED USER EXACTLY IN THE CENTER OF THE MAP
         let userPos = { x: 22, y: 15 }; 
         
         let path = [];
@@ -90,14 +89,14 @@
         let activeZones = [];
 
         const cameras = [
-            { id: "CAM-A1", x: 4, y: 2, zone: 'A' },
-            { id: "CAM-A2", x: 16, y: 2, zone: 'A' },
-            { id: "CAM-B1", x: 14, y: 16, zone: 'B' },
-            { id: "CAM-B2", x: 4, y: 28, zone: 'B' },
-            { id: "CAM-C1", x: 24, y: 4, zone: 'C' },
-            { id: "CAM-C2", x: 24, y: 15, zone: 'C' },
-            { id: "CAM-D1", x: 35, y: 2, zone: 'D' },
-            { id: "CAM-D2", x: 40, y: 28, zone: 'D' }
+            { id: "CAM1", x: 4, y: 2, zone: 'A' },
+            { id: "CAM2", x: 16, y: 2, zone: 'A' },
+            { id: "CAM3", x: 14, y: 16, zone: 'B' },
+            { id: "CAM4", x: 4, y: 28, zone: 'B' },
+            { id: "CAM5", x: 24, y: 4, zone: 'C' },
+            { id: "CAM6", x: 24, y: 15, zone: 'C' },
+            { id: "CAM7", x: 35, y: 2, zone: 'D' },
+            { id: "CAM8", x: 40, y: 28, zone: 'D' }
         ];
 
         function getZone(x, y) {
@@ -152,10 +151,8 @@
             pathIsHazard = false;
             if (grid[userPos.y][userPos.x] === WALL) { path = []; return; }
 
-            // Pass 1: Try to find a completely safe route
             path = bfs(false);
             
-            // Pass 2: If no safe route exists, find the shortest route ignoring hazards
             if (path.length === 0) {
                 path = bfs(true);
                 if (path.length > 0) {
@@ -219,16 +216,7 @@
                 }
             }
 
-            // 2. Darker, More Visible Labels
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; 
-            ctx.font = 'bold 36px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText("ZONE A", 5 * cellSize, 8 * cellSize);
-            ctx.fillText("ZONE B", 6 * cellSize, 22 * cellSize);
-            ctx.fillText("ZONE C", 24 * cellSize, 16 * cellSize);
-            ctx.fillText("ZONE D", 37 * cellSize, 16 * cellSize);
-
-            // 3. Draw Objects
+            // 2. Draw Objects (Walls, Exits, Hazards) FIRST
             for (let y = 0; y < rows; y++) {
                 for (let x = 0; x < cols; x++) {
                     if (grid[y][x] === WALL) { ctx.fillStyle = '#404040'; ctx.fillRect(x*cellSize+1, y*cellSize+1, cellSize-2, cellSize-2); }
@@ -237,7 +225,7 @@
                 }
             }
 
-            // 4. Draw Path with Arrows
+            // 3. Draw Path with Arrows
             if (path.length > 0) {
                 ctx.beginPath(); 
                 ctx.strokeStyle = pathIsHazard ? '#f39c12' : '#3498db'; 
@@ -262,8 +250,9 @@
                 }
             }
 
-            // 5. Cameras
+            // 4. Cameras (With Labels)
             let activeCamsHTML = "";
+            ctx.textAlign = 'center';
             cameras.forEach(cam => {
                 let px = cam.x * cellSize + cellSize/2;
                 let py = cam.y * cellSize + cellSize/2;
@@ -281,14 +270,42 @@
                     ctx.stroke(); ctx.setLineDash([]);
                     
                     ctx.fillStyle = '#ff0000';
-                    activeCamsHTML += `> ${cam.id} [Z-${cam.zone}]: TRACKING HAZARD<br>`;
+                    activeCamsHTML += `> ${cam.id} [Zone ${cam.zone}]: TRACKING HAZARD<br>`;
                 } else {
                     ctx.fillStyle = '#333'; 
                 }
                 
+                // Draw Camera Hardware Icon
                 ctx.fillRect(px - 6, py - 6, 12, 12);
                 ctx.fillStyle = 'white';
                 ctx.fillRect(px - 2, py - 2, 4, 4);
+
+                // Draw Camera Text Label
+                ctx.font = 'bold 11px Arial';
+                let textWidth = ctx.measureText(cam.id).width;
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; // Dark pill background
+                ctx.fillRect(px - textWidth/2 - 4, py - 22, textWidth + 8, 14);
+                ctx.fillStyle = '#ffffff'; // White text
+                ctx.fillText(cam.id, px, py - 12);
+            });
+
+            // 5. FLOATING Map Labels
+            ctx.font = 'bold 40px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#ffff66'; // Distinctive light yellow
+            ctx.strokeStyle = '#222222'; // Dark outline
+            ctx.lineWidth = 4;
+
+            const mapLabels = [
+                {text: "ZONE A", x: 5.5, y: 8},
+                {text: "ZONE B", x: 6.5, y: 22},
+                {text: "ZONE C", x: 24, y: 16},
+                {text: "ZONE D", x: 37, y: 16}
+            ];
+
+            mapLabels.forEach(label => {
+                ctx.strokeText(label.text, label.x * cellSize, label.y * cellSize);
+                ctx.fillText(label.text, label.x * cellSize, label.y * cellSize);
             });
 
             // 6. Draw User
@@ -333,7 +350,7 @@
             statusDisplay.innerHTML = statusHtml;
         }
 
-        // EVENT LISTENERS (Reliable, no animation loop)
+        // Event Listeners for Movement
         document.addEventListener('keydown', (e) => {
             if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].indexOf(e.code) > -1) e.preventDefault();
             let nx = userPos.x;
