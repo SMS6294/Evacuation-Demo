@@ -7,23 +7,24 @@
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; color: #333; display: flex; flex-direction: column; align-items: center; padding: 20px; margin: 0; }
         h1 { margin-bottom: 5px; color: #2c3e50; }
-        p { color: #555; margin-top: 0; margin-bottom: 20px; }
+        p { color: #555; margin-top: 0; margin-bottom: 20px; font-size: 16px; }
         .dashboard { display: flex; gap: 25px; background: #fff; padding: 25px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
         .canvas-container { box-shadow: 0 4px 15px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; position: relative; }
         canvas { display: block; cursor: crosshair; background: white; }
         .controls { width: 320px; display: flex; flex-direction: column; gap: 20px; }
         .control-group { background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #e9ecef; }
         .control-group.hazard-zone { background: #fff5f5; border-color: #ffcccc; }
-        label { display: block; margin-bottom: 8px; font-weight: 600; color: #555; }
-        select, button { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ced4da; font-size: 14px; background: #fff; }
+        label { display: block; margin-bottom: 8px; font-weight: 600; color: #555; font-size: 15px; }
+        select, button { width: 100%; padding: 12px; border-radius: 6px; border: 1px solid #ced4da; font-size: 15px; background: #fff; }
         button { background-color: #3498db; color: white; border: none; font-weight: 600; cursor: pointer; transition: all 0.2s; }
         button:hover { background-color: #2980b9; }
         button.apply-btn { background-color: #e74c3c; margin-top: 10px; }
         button.apply-btn:hover { background-color: #c0392b; }
-        .status-box { background: #1e272e; color: #00d8d6; padding: 15px; border-radius: 6px; font-family: 'Courier New', Courier, monospace; font-size: 13px; min-height: 120px; border-left: 4px solid #0fb9b1; }
+        .status-box { background: #1e272e; color: #00d8d6; padding: 15px; border-radius: 6px; font-family: 'Courier New', Courier, monospace; font-size: 14px; min-height: 120px; border-left: 4px solid #0fb9b1; }
         
-        .checkbox-group div { margin-bottom: 8px; display: flex; align-items: center; }
-        input[type="checkbox"] { margin-right: 10px; transform: scale(1.2); }
+        .checkbox-group div { margin-bottom: 10px; display: flex; align-items: center; }
+        input[type="checkbox"] { margin-right: 12px; transform: scale(1.3); }
+        .zone-label { font-size: 16px; margin: 0; font-weight: bold; }
         kbd { background: #eee; border: 1px solid #ccc; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-weight: bold; }
     </style>
 </head>
@@ -41,10 +42,10 @@
             <div class="control-group hazard-zone">
                 <label>🛡️ Incident Command (Block Zones):</label>
                 <div class="checkbox-group">
-                    <div><input type="checkbox" id="blockA"> <label for="blockA" style="color: #d4ac0d; margin:0; font-weight:bold;">Zone A (Westside)</label></div>
-                    <div><input type="checkbox" id="blockB"> <label for="blockB" style="color: #28a745; margin:0; font-weight:bold;">Zone B (M&S)</label></div>
-                    <div><input type="checkbox" id="blockC"> <label for="blockC" style="color: #007bff; margin:0; font-weight:bold;">Zone C (Center)</label></div>
-                    <div><input type="checkbox" id="blockD"> <label for="blockD" style="color: #6f42c1; margin:0; font-weight:bold;">Zone D (Hypermarket)</label></div>
+                    <div><input type="checkbox" id="blockA"> <label for="blockA" class="zone-label" style="color: #d4ac0d;">Zone A</label></div>
+                    <div><input type="checkbox" id="blockB"> <label for="blockB" class="zone-label" style="color: #28a745;">Zone B</label></div>
+                    <div><input type="checkbox" id="blockC"> <label for="blockC" class="zone-label" style="color: #007bff;">Zone C</label></div>
+                    <div><input type="checkbox" id="blockD"> <label for="blockD" class="zone-label" style="color: #6f42c1;">Zone D</label></div>
                 </div>
                 <button class="apply-btn" onclick="applyZoneChanges()">Trigger Zone Lockdown</button>
             </div>
@@ -95,12 +96,12 @@
             { id: "CAM4", x: 4, y: 28, zone: 'B' },
             { id: "CAM5", x: 24, y: 4, zone: 'C' },
             { id: "CAM6", x: 24, y: 15, zone: 'C' },
-            { id: "CAM7", x: 35, y: 2, zone: 'D' },
+            { id: "CAM7", x: 35, y: 1, zone: 'D' }, 
             { id: "CAM8", x: 40, y: 28, zone: 'D' }
         ];
 
         function getZone(x, y) {
-            if (x >= 30) return 'D';
+            if (x >= 31) return 'D';
             if (x < 18 && y < 14) {
                 if (x > 12 && y > 8) return 'C'; 
                 return 'A';
@@ -111,7 +112,9 @@
 
         function initBaseGrid() {
             baseGrid = Array.from({ length: rows }, () => Array(cols).fill(EMPTY));
-            for(let y=2; y<rows; y++) for(let x=30; x<cols; x++) baseGrid[y][x] = WALL; 
+            
+            for(let y=2; y<28; y++) for(let x=32; x<43; x++) baseGrid[y][x] = WALL; 
+            
             for(let y=4; y<12; y++) for(let x=2; x<10; x++) baseGrid[y][x] = WALL;  
             for(let y=16; y<28; y++) for(let x=2; x<12; x++) baseGrid[y][x] = WALL; 
             for(let y=8; y<14; y++) for(let x=20; x<28; x++) baseGrid[y][x] = WALL; 
@@ -219,9 +222,25 @@
             // 2. Draw Objects (Walls, Exits, Hazards) FIRST
             for (let y = 0; y < rows; y++) {
                 for (let x = 0; x < cols; x++) {
-                    if (grid[y][x] === WALL) { ctx.fillStyle = '#404040'; ctx.fillRect(x*cellSize+1, y*cellSize+1, cellSize-2, cellSize-2); }
-                    if (grid[y][x] === EXIT) { ctx.fillStyle = '#28a745'; ctx.fillRect(x*cellSize+1, y*cellSize+1, cellSize-2, cellSize-2); }
-                    if (grid[y][x] === HAZARD) { ctx.fillStyle = 'rgba(231, 76, 60, 0.8)'; ctx.fillRect(x*cellSize, y*cellSize, cellSize, cellSize); }
+                    if (grid[y][x] === WALL) { 
+                        ctx.fillStyle = '#404040'; 
+                        ctx.fillRect(x*cellSize+1, y*cellSize+1, cellSize-2, cellSize-2); 
+                    }
+                    if (grid[y][x] === EXIT) { 
+                        // Draw Green Block
+                        ctx.fillStyle = '#28a745'; 
+                        ctx.fillRect(x*cellSize+1, y*cellSize+1, cellSize-2, cellSize-2); 
+                        
+                        // Draw "EXIT" Text (Slightly larger now)
+                        ctx.fillStyle = '#ffffff';
+                        ctx.font = 'bold 10px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.fillText("EXIT", x*cellSize + cellSize/2, y*cellSize + cellSize/2 + 4);
+                    }
+                    if (grid[y][x] === HAZARD) { 
+                        ctx.fillStyle = 'rgba(231, 76, 60, 0.8)'; 
+                        ctx.fillRect(x*cellSize, y*cellSize, cellSize, cellSize); 
+                    }
                 }
             }
 
@@ -275,25 +294,24 @@
                     ctx.fillStyle = '#333'; 
                 }
                 
-                // Draw Camera Hardware Icon
                 ctx.fillRect(px - 6, py - 6, 12, 12);
                 ctx.fillStyle = 'white';
                 ctx.fillRect(px - 2, py - 2, 4, 4);
 
-                // Draw Camera Text Label
-                ctx.font = 'bold 11px Arial';
+                // Draw Camera Text Label (Slightly larger now)
+                ctx.font = 'bold 12px Arial';
                 let textWidth = ctx.measureText(cam.id).width;
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; // Dark pill background
-                ctx.fillRect(px - textWidth/2 - 4, py - 22, textWidth + 8, 14);
-                ctx.fillStyle = '#ffffff'; // White text
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; 
+                ctx.fillRect(px - textWidth/2 - 5, py - 24, textWidth + 10, 16);
+                ctx.fillStyle = '#ffffff'; 
                 ctx.fillText(cam.id, px, py - 12);
             });
 
-            // 5. FLOATING Map Labels
-            ctx.font = 'bold 40px Arial';
+            // 5. FLOATING Map Labels with 60% Transparency (Increased to 50px font size)
+            ctx.font = 'bold 50px Arial';
             ctx.textAlign = 'center';
-            ctx.fillStyle = '#ffff66'; // Distinctive light yellow
-            ctx.strokeStyle = '#222222'; // Dark outline
+            ctx.fillStyle = 'rgba(255, 255, 102, 0.4)'; 
+            ctx.strokeStyle = 'rgba(34, 34, 34, 0.4)'; 
             ctx.lineWidth = 4;
 
             const mapLabels = [
@@ -304,8 +322,9 @@
             ];
 
             mapLabels.forEach(label => {
-                ctx.strokeText(label.text, label.x * cellSize, label.y * cellSize);
-                ctx.fillText(label.text, label.x * cellSize, label.y * cellSize);
+                // Adjust Y positioning slightly so the larger text is still centered well
+                ctx.strokeText(label.text, label.x * cellSize, label.y * cellSize + 10);
+                ctx.fillText(label.text, label.x * cellSize, label.y * cellSize + 10);
             });
 
             // 6. Draw User
